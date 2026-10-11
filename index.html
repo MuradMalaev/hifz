@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Хифз</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cormorant:wght@500;600;700&family=Manrope:wght@400;600;700;800&display=swap">
+<link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#" data-act="tab" data-tab="today"><b>Хифз</b><span lang="ar">حِفْظ</span></a>
+    <nav class="tabs" aria-label="Разделы">
+      <button class="tab" data-act="tab" data-tab="today">Сегодня</button>
+      <button class="tab" data-act="tab" data-tab="suras">Суры</button>
+      <button class="tab" data-act="tab" data-tab="manzil">Манзиль</button>
+      <button class="tab" data-act="tab" data-tab="tips">Методика</button>
+      <button class="tab" data-act="tab" data-tab="settings">Настройки</button>
+    </nav>
+  </div>
+</header>
+<main class="wrap" id="main"><p class="muted" style="padding:40px 0">Загрузка…</p></main>
+<footer class="wrap foot"><span id="mode"></span><span>Перевод смыслов: Э. Кулиев · Тафсир: Ибн Касир · Аудио: everyayah.com</span></footer>
+<div id="overlay"></div>
+<div class="player" id="player" hidden></div>
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="static/data.js"></script>
+<script src="static/data/quran.js"></script>
+<script src="static/blocks.js"></script>
+<script src="static/app.js"></script>
+</body>
+</html>
