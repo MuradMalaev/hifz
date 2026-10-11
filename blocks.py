@@ -109,10 +109,10 @@ def compute(ayahs, offset=1, size="std"):
             c += (cnt - maxa) * 0.3
         if length > target * 2.2:
             c += 2
-        if cnt == 1 and length < target * 0.5:
-            c += 0.4
+        if length < target * 0.45:  # слишком маленький блок
+            c += (target * 0.45 - length) / (target * 0.45) * 1.6
         if a > 0:
-            c -= 0.6 * score[a]
+            c -= 0.3 * score[a]
         return c
 
     best, frm = [0.0], [0]

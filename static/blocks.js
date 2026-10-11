@@ -87,8 +87,8 @@
       var d = (len - TARGET) / TARGET, c = d * d;
       if (cnt > MAXA) c += (cnt - MAXA) * 0.3;
       if (len > TARGET * 2.2) c += 2;
-      if (cnt === 1 && len < TARGET * 0.5) c += 0.4;
-      if (a > 0) c -= 0.6 * score[a];
+      if (len < TARGET * 0.45) c += (TARGET * 0.45 - len) / (TARGET * 0.45) * 1.6; // слишком маленький блок
+      if (a > 0) c -= 0.3 * score[a];
       return c;
     }
     var best = [0], from = [0];
