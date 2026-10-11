@@ -369,3 +369,19 @@ body.has-player .toast { bottom: calc(96px + var(--nav-h) + env(safe-area-inset-
   .suras { grid-template-columns: minmax(0, 1fr); }
   .kedit { padding-left: 10px; }
 }
+
+/* ---------- темы блоков, чтение из манзиля ---------- */
+.bt { display: grid; min-width: 0; flex: 1; }
+.bt .bn { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bd { font-size: 12.5px; color: var(--ink-soft); line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.brow.open .bt .bn, .brow.open .bd { white-space: normal; }
+.progress > div { display: grid; }
+.progress span { display: block; }
+.mlist li { gap: 4px; }
+.mitem { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; border: 0; background: none; padding: 6px 4px; border-radius: 10px; text-align: left; }
+.mitem:hover { background: var(--paper); }
+.mitem span:nth-child(2) { flex: 1; min-width: 0; }
+.mopen { font-size: 12.5px; font-weight: 600; color: var(--green); flex: none; }
+.mdl li { list-style: none; }
+.link.plain { color: var(--ink); font-weight: 500; text-align: left; font-size: 14px; }
+@media (max-width: 640px) { .mitem .ar { display: none; } }

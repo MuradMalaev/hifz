@@ -7,9 +7,30 @@
 (function () {
   "use strict";
   var SURAS = window.HIFZ_SURAS, JUZ = window.HIFZ_JUZ, RECITERS = window.HIFZ_RECITERS;
-  var Q = window.__HIFZ_QURAN__;
+  var Q = window.__HIFZ_QURAN__, THEMES = window.HIFZ_THEMES || {};
+  var BLOCKS_VER = 3; // при смене алгоритма блоков автоматические блоки пересчитываются
   var B = window.HifzBlocks;
-  var TOTAL = Q.total, LPP = Q.total / 604; // букв на страницу мусхафа (в среднем)
+  /* Объём считается в страницах мединского мусхафа (604 стр.) — так меряют хифз.
+     Страницы суры берутся из её положения в мусхафе, а внутри суры делятся по числу букв аятов. */
+  var MUSHAF = 604;
+  var PW = (function () { // вес каждого аята в страницах: буквы аята / плотность текста его джуза
+    var pagesInJuz = [21], j, n, a;
+    for (j = 1; j < 29; j++) pagesInJuz.push(20);
+    pagesInJuz.push(23); // 21 + 28×20 + 23 = 604
+    var juzLetters = [], juzIdx = {};
+    for (j = 0; j < 30; j++) juzLetters.push(0);
+    j = 0;
+    for (n = 1; n <= 114; n++) {
+      juzIdx[n] = [];
+      for (a = 1; a <= SURAS[n - 1].ayahs; a++) {
+        while (j < 29 && (JUZ[j + 1][0] < n || (JUZ[j + 1][0] === n && JUZ[j + 1][1] <= a))) j++;
+        juzIdx[n].push(j); juzLetters[j] += Q.suras[n - 1].len[a - 1];
+      }
+    }
+    var out = {};
+    for (n = 1; n <= 114; n++) out[n] = Q.suras[n - 1].len.map(function (l, i) { var jj = juzIdx[n][i]; return l * pagesInJuz[jj] / juzLetters[jj]; });
+    return out;
+  })();
   var DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
   var DAYS_FULL = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"];
   var KEY = "hifz.state.v2";
@@ -37,7 +58,7 @@
       cycle: 7, weekStart: 0, ustaz: [], rest: [], direction: "end", norm: 0.5
     };
   }
-  function blank() { return { v: 2, setup: false, set: defaults(), current: null, suras: {}, reviews: [], manzil: {}, anchor: today(), log: [] }; }
+  function blank() { return { v: 2, bver: BLOCKS_VER, setup: false, set: defaults(), current: null, suras: {}, reviews: [], manzil: {}, anchor: today(), log: [] }; }
   function newOb() { return { step: 0, picks: {}, q: "", partial: null, tr: false, tf: false }; }
   var state = null, mode = "local";
   var view = { tab: "today", sura: null, filter: "all", q: "", openB: null, edit: null, check: {}, hint: {}, pick: false, tafsir: null, ob: null, confirm: null, rangeEdit: false };
@@ -67,6 +88,12 @@
     for (var i = a; i <= b; i++) if (!onlyDone || isDone(n, i)) t += L[i - 1];
     return t;
   }
+  function pagesOf(n, a, b, onlyDone) {
+    var w = PW[n], t = 0; a = a || 1; b = b || w.length;
+    for (var i = a; i <= b; i++) if (!onlyDone || isDone(n, i)) t += w[i - 1];
+    return t;
+  }
+  function suraPages(n) { return pagesOf(n); }
   function runs(n) {
     var out = [], st = null, c = count(n);
     for (var i = 1; i <= c + 1; i++) {
@@ -99,6 +126,10 @@
       for (var k in d) if (!(k in st.set)) st.set[k] = d[k];
       st.suras = st.suras || {}; st.reviews = st.reviews || []; st.manzil = st.manzil || {}; st.log = st.log || [];
       st.anchor = st.anchor || today();
+      if (st.bver !== BLOCKS_VER) {
+        Object.keys(st.suras).forEach(function (k2) { var x = st.suras[k2]; if (x.bsrc !== "custom") { x.blocks = null; x.bsrc = null; } });
+        st.bver = BLOCKS_VER;
+      }
       return st;
     }
     if (st.v === 1) {
@@ -141,12 +172,23 @@
     var c = count(n), f = firstUndone(n) || 1;
     if (c <= 40 && f === 1) return [1, c];
     var L = lens(n), sum = 0, e = f;
-    while (e <= c && sum + L[e - 1] <= LPP * 2) { sum += L[e - 1]; e++; }
+    var cap = lettersOf(n) / suraPages(n) * 2; // около двух страниц
+    while (e <= c && sum + L[e - 1] <= cap) { sum += L[e - 1]; e++; }
     return [f, Math.max(f, Math.min(c, e - 1))];
   }
   function range(n) { var s = S(n); if (!s.range) s.range = defaultRange(n); return s.range; }
+  /* блоки: тематическое деление (если есть для суры), обрезанное по диапазону; иначе — автоматический расчёт */
   function autoBlocks(n) {
-    var r = range(n), part = rows(n).slice(r[0] - 1, r[1]).map(function (x) { return { ar: x[0], ru: x[1] }; });
+    var r = range(n), th = THEMES[n];
+    if (th) {
+      var out = [];
+      th.forEach(function (t) {
+        var s = Math.max(t[0], r[0]), e = Math.min(t[1], r[1]);
+        if (s <= e) out.push({ s: s, e: e, name: t[2], d: t[3] });
+      });
+      if (out.length) return out;
+    }
+    var part = rows(n).slice(r[0] - 1, r[1]).map(function (x) { return { ar: x[0], ru: x[1] }; });
     return B.compute(part, { offset: r[0], size: state.set.blockSize });
   }
   function blocksOf(n) {
@@ -218,15 +260,15 @@
     var cyc = state.set.cycle, units = [], total = 0;
     SURAS.forEach(function (x) {
       if (x.n === 1) return;
-      runs(x.n).forEach(function (r) { var l = lettersOf(x.n, r[0], r[1]); units.push({ n: x.n, s: r[0], e: r[1], w: l }); total += l; });
+      runs(x.n).forEach(function (r) { var l = pagesOf(x.n, r[0], r[1]); units.push({ n: x.n, s: r[0], e: r[1], w: l }); total += l; });
     });
     if (!units.length) return [];
     var cap = total / cyc * 0.5, fine = [];
     units.forEach(function (u) {
       if (u.w <= cap) { fine.push(u); return; }
-      var L = lens(u.n), a = u.s, sum = 0;
+      var a = u.s, sum = 0;
       for (var i = u.s; i <= u.e; i++) {
-        sum += L[i - 1];
+        sum += pagesOf(u.n, i, i);
         if (sum >= cap || i === u.e) { fine.push({ n: u.n, s: a, e: i, w: sum }); a = i + 1; sum = 0; }
       }
     });
@@ -248,25 +290,25 @@
         var last = items[items.length - 1];
         if (last && last.n === u.n && last.e + 1 === u.s) { last.e = u.e; last.w += u.w; } else items.push({ n: u.n, s: u.s, e: u.e, w: u.w });
       });
-      return { items: items, pages: p.reduce(function (a, u) { return a + u.w; }, 0) / LPP };
+      return { items: items, pages: p.reduce(function (a, u) { return a + u.w; }, 0) };
     });
   }
   function itemLabel(it) { return SURAS[it.n - 1].ru + (it.s === 1 && it.e === count(it.n) ? "" : " · " + it.s + "–" + it.e); }
 
   /* ---------------- статистика и прогноз ---------------- */
   function stats() {
-    var f = 0, h = 0, ay = 0, let_ = 0;
+    var f = 0, h = 0, ay = 0, pg = 0;
     SURAS.forEach(function (x) {
       if (!state.suras[x.n]) return;
-      var c = doneCount(x.n); ay += c; if (c) let_ += lettersOf(x.n, 1, count(x.n), true);
+      var c = doneCount(x.n); ay += c; if (c) pg += pagesOf(x.n, 1, count(x.n), true);
       if (hifz(x.n)) h++; if (full(x.n)) f++;
     });
-    return { full: f, hifz: h, ayahs: ay, pct: let_ / TOTAL * 100 };
+    return { full: f, hifz: h, ayahs: ay, pages: pg, pct: pg / MUSHAF * 100 };
   }
   function isRest(dstr) { return state.set.rest.indexOf(weekday(dstr)) !== -1; }
-  function finishDate(letters) {
-    if (letters <= 0) return null;
-    var perDay = state.set.norm * LPP, days = Math.ceil(letters / perDay), d = today(), guard = 0;
+  function finishDate(pages) {
+    if (pages <= 0.001) return null;
+    var days = Math.ceil(pages / state.set.norm - 1e-9), d = today(), guard = 0;
     while (days > 0 && guard < 4000) { if (!isRest(d)) days--; if (days > 0) d = addDays(d, 1); guard++; }
     return d;
   }
@@ -275,7 +317,7 @@
     var st = JUZ[j], en = JUZ[j + 1] || [115, 1], sum = 0;
     for (var n = st[0]; n <= Math.min(114, en[0]); n++) {
       var a = n === st[0] ? st[1] : 1, b = n === en[0] ? en[1] - 1 : count(n);
-      if (b >= a) sum += lettersOf(n, a, b) - lettersOf(n, a, b, true);
+      if (b >= a) sum += pagesOf(n, a, b) - pagesOf(n, a, b, true);
     }
     return sum;
   }
@@ -353,25 +395,49 @@
     stopAudio(true);
     var list = [];
     for (var i = a; i <= b; i++) list.push(i);
-    player = { on: true, paused: false, n: n, list: list, i: 0, rep: 1, round: 1, audio: player.audio || new Audio(), timer: null, err: "",
+    var au = player.audio;
+    if (!au) { au = new Audio(); au.preload = "auto"; }
+    player = { on: true, paused: false, n: n, list: list, i: 0, rep: 1, round: 1, audio: au, pre: player.pre || null, timer: null, watch: null, err: "", loading: true,
       reps: Math.max(1, state.set.ayahRep), rounds: single ? 1 : Math.max(1, state.set.blockRep) };
-    playCurrent(false);
+    playCurrent(0);
     renderPlayer();
   }
-  function playCurrent(alt) {
-    var au = player.audio, a = player.list[player.i];
-    au.onended = onEnded;
-    au.onerror = function () {
-      if (!alt && reciter().alt) { playCurrent(true); return; }
-      player.err = "Аудио не загрузилось. Проверьте интернет или выберите другого чтеца.";
-      player.paused = true; renderPlayer();
+  /* attempt: 0 — основной источник, 1 — повтор основного, 2 — запасной источник */
+  function playCurrent(attempt) {
+    var au = player.audio, a = player.list[player.i], r = reciter();
+    clearTimeout(player.watch);
+    var fail = function () {
+      clearTimeout(player.watch);
+      if (!player.on) return;
+      if (attempt === 0) { playCurrent(1); return; }
+      if (attempt === 1 && r.alt) { playCurrent(2); return; }
+      player.err = "Аудио не загрузилось. Проверьте интернет или выберите другого чтеца в настройках.";
+      player.paused = true; player.loading = false; renderPlayer();
     };
-    au.src = audioUrl(player.n, a, alt);
+    au.onended = onEnded;
+    au.onerror = fail;
+    au.onplaying = function () { clearTimeout(player.watch); player.loading = false; player.err = ""; renderPlayer(); };
+    au.src = audioUrl(player.n, a, attempt === 2);
+    try { au.load(); } catch (e) { /* ignore */ }
     au.playbackRate = state.set.speed;
     try { au.defaultPlaybackRate = state.set.speed; } catch (e) { /* ignore */ }
+    player.loading = true;
+    // если звук не начался за 12 секунд — пробуем ещё раз или запасной источник
+    player.watch = setTimeout(function () { if (player.on && !player.paused && player.loading) fail(); }, 12000);
     var pr = au.play();
-    if (pr && pr.catch) pr.catch(function () { /* обработает onerror */ });
+    if (pr && pr.catch) pr.catch(function (err) {
+      if (err && err.name === "NotAllowedError") { // браузер требует нажатия
+        clearTimeout(player.watch); player.paused = true; player.loading = false;
+        player.err = "Нажмите ▶, чтобы включить звук"; renderPlayer();
+      } // AbortError — смена аята, не ошибка; сетевые ошибки обработает onerror
+    });
+    preloadNext();
     highlight();
+  }
+  function preloadNext() { // заранее загружаем следующий аят, чтобы не было пауз
+    var nx = player.list[player.i + 1];
+    if (!nx) return;
+    try { if (!player.pre) player.pre = new Audio(); player.pre.preload = "auto"; player.pre.src = audioUrl(player.n, nx, false); } catch (e) { /* ignore */ }
   }
   function onEnded() {
     var au = player.audio, wait = state.set.pause * 1000;
@@ -382,26 +448,26 @@
     else if (player.round < player.rounds) { player.rep = 1; player.i = 0; player.round++; }
     else { stopAudio(); toast("Повтор завершён"); return; }
     renderPlayer();
-    player.timer = setTimeout(function () { if (player.on && !player.paused) playCurrent(false); }, wait);
+    player.timer = setTimeout(function () { if (player.on && !player.paused) playCurrent(0); }, wait);
   }
   function stopAudio(silent) {
-    clearTimeout(player.timer);
-    if (player.audio) { try { player.audio.pause(); } catch (e) { /* ignore */ } player.audio.onended = null; player.audio.onerror = null; }
+    clearTimeout(player.timer); clearTimeout(player.watch);
+    if (player.audio) { try { player.audio.pause(); } catch (e) { /* ignore */ } player.audio.onended = null; player.audio.onerror = null; player.audio.onplaying = null; }
     player.on = false; player.paused = false;
     document.body.classList.remove("has-player");
     if (!silent) { renderPlayer(); highlight(); }
   }
   function togglePause() {
     if (!player.on) return;
-    if (player.paused) { player.paused = false; player.err = ""; playCurrent(false); }
-    else { player.paused = true; clearTimeout(player.timer); try { player.audio.pause(); } catch (e) { /* ignore */ } }
+    if (player.paused) { player.paused = false; player.err = ""; playCurrent(0); }
+    else { player.paused = true; clearTimeout(player.timer); clearTimeout(player.watch); try { player.audio.pause(); } catch (e) { /* ignore */ } }
     renderPlayer();
   }
   function stepAyah(d) {
     if (!player.on) return;
     clearTimeout(player.timer);
     player.i = Math.max(0, Math.min(player.list.length - 1, player.i + d)); player.rep = 1; player.paused = false;
-    playCurrent(false); renderPlayer();
+    playCurrent(0); renderPlayer();
   }
   function highlight() {
     var els = document.querySelectorAll(".ayah.playing");
@@ -418,7 +484,7 @@
     el.hidden = false;
     el.innerHTML = '<div class="pl-in"><div class="pl-info"><b>' + esc(SURAS[player.n - 1].ru) + " · аят " + a + "</b><span>" +
       (player.err ? '<span class="err">' + esc(player.err) + "</span>" :
-        "повтор " + player.rep + " из " + player.reps + (player.rounds > 1 ? " · круг " + player.round + " из " + player.rounds : "")) +
+        (player.loading && !player.paused ? "загрузка…" : "повтор " + player.rep + " из " + player.reps + (player.rounds > 1 ? " · круг " + player.round + " из " + player.rounds : ""))) +
       '</span></div><div class="pl-btns"><button class="pbtn" data-act="pl-prev" aria-label="Предыдущий аят">' + ICON.prev + '</button><button class="pbtn main" data-act="pl-toggle" aria-label="' + (player.paused ? "Продолжить" : "Пауза") + '">' + (player.paused ? ICON.play : ICON.pause) +
       '</button><button class="pbtn" data-act="pl-next" aria-label="Следующий аят">' + ICON.next + '</button><button class="pbtn" data-act="pl-stop" aria-label="Остановить">' + ICON.close + "</button></div></div>";
   }
@@ -516,12 +582,12 @@
     var notes = [];
     if (set.ustaz.indexOf(wd) !== -1) notes.push("урок с устазом");
     if (isRest(t)) notes.push("без нового урока");
-    var pct = st.pct < 10 ? st.pct.toFixed(2) : st.pct.toFixed(1);
+    var pct = st.pct.toFixed(1).replace(".", ","), pagesTxt = st.pages < 10 ? st.pages.toFixed(1).replace(".", ",") : Math.round(st.pages), juzTxt = (st.pages / 20).toFixed(1).replace(".", ",");
     var R = 22, C = 2 * Math.PI * R;
     var h = '<div class="hello"><div><span class="eyebrow">' + DAYS_FULL[wd] + ", " + esc(nice(t)) + (notes.length ? " · " + notes.join(" · ") : "") + "</span>" +
       "<h1>" + (set.name ? "Ас-саляму алейкум, " + esc(set.name) : "Ас-саляму алейкум") + "</h1></div>" +
       '<div class="progress"><svg viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="' + R + '" class="pr-track"/><circle cx="26" cy="26" r="' + R + '" class="pr-arc" stroke-dasharray="' + (C * Math.min(st.pct, 100) / 100).toFixed(1) + " " + C.toFixed(1) + '" transform="rotate(-90 26 26)"/></svg>' +
-      "<div><b>" + pct + '% Корана</b><span>' + st.hifz + " " + plural(st.hifz, "сура", "суры", "сур") + " наизусть · " + st.ayahs + " " + plural(st.ayahs, "аят", "аята", "аятов") + (st.full ? " · " + st.full + " полностью" : "") + "</span></div></div></div>";
+      "<div><b>" + pct + '% Корана</b><span>≈ ' + pagesTxt + " из 604 стр. · " + juzTxt + " джуза</span><span>" + st.hifz + " " + plural(st.hifz, "сура", "суры", "сур") + " наизусть" + (st.full ? ", " + st.full + " полностью" : "") + "</span></div></div></div>";
     h += '<div class="day"><div class="col">' + (set.ustaz.indexOf(wd) !== -1 ? ustazNote() : "") + sabakCard() + '</div><div class="col">' + manzilCard() + sabqiCard() + "</div></div>";
     return h;
   }
@@ -550,15 +616,15 @@
     h += '<ol class="blist">' + bl.map(function (b, i) {
       var dn = blockDone(n, b), cur = i === nb;
       var row = '<li class="brow' + (dn ? " done" : "") + (cur ? " cur" : "") + '"><button class="tick' + (dn ? " on" : "") + '" data-act="block-toggle" data-n="' + n + '" data-i="' + i + '" aria-label="' + (dn ? "Снять отметку" : "Отметить выученным") + '">' + ICON.check + "</button>" +
-        '<button class="bmain" data-act="open-block" data-n="' + n + '" data-i="' + i + '"><span class="br">' + rng(b.s, b.e) + '</span><span class="bn">' + esc(b.name) + "</span></button>" +
+        '<button class="bmain" data-act="open-block" data-n="' + n + '" data-i="' + i + '"><span class="br">' + rng(b.s, b.e) + '</span><span class="bt"><span class="bn">' + esc(b.name) + "</span>" + (b.d ? '<span class="bd">' + esc(b.d) + "</span>" : "") + "</span></button>" +
         '<button class="icon" data-act="play-block" data-n="' + n + '" data-i="' + i + '" aria-label="Слушать блок">' + ICON.play + "</button>";
       return row + "</li>";
     }).join("") + "</ol>";
     if (nb >= 0 && nb > 0) h += '<p class="hint">Перед новым блоком прочитайте выученные подряд.</p>';
-    var remS = lettersOf(n) - lettersOf(n, 1, count(n), true), j = juzOf(n, firstUndone(n) || 1), remJ = juzRemaining(j);
+    var remS = pagesOf(n) - pagesOf(n, 1, count(n), true), j = juzOf(n, firstUndone(n) || 1), remJ = juzRemaining(j);
     var parts = [];
-    if (remS > 0) parts.push("сура — " + nice(finishDate(remS)));
-    if (remJ > 0) parts.push("джуз " + (j + 1) + " — " + nice(finishDate(remJ)));
+    if (remS > 0.001) parts.push("сура — " + nice(finishDate(remS)));
+    if (remJ > 0.001) parts.push("джуз " + (j + 1) + " — " + nice(finishDate(remJ)));
     if (parts.length) h += '<p class="forecast">При вашей норме: ' + parts.join(", ") + "</p>";
     return h + "</section>";
   }
@@ -586,7 +652,7 @@
     var p = parts[ci.idx], doneT = !!state.manzil[t];
     h += '<span class="muted small">' + esc(dayLabel(ci.idx)) + (p ? " · ≈ " + p.pages.toFixed(1) + " стр." : "") + "</span></div>";
     if (p) h += '<ul class="mlist">' + p.items.map(function (it) {
-      return '<li><span class="ar">' + esc(SURAS[it.n - 1].ar) + "</span><span>" + esc(itemLabel(it)) + '</span><button class="icon" data-act="play" data-n="' + it.n + '" data-a="' + it.s + '" data-b="' + it.e + '" data-once="1" aria-label="Слушать">' + ICON.play + "</button></li>";
+      return '<li><button class="mitem" data-act="read" data-n="' + it.n + '" data-a="' + it.s + '" data-b="' + it.e + '"><span class="ar">' + esc(SURAS[it.n - 1].ar) + "</span><span>" + esc(itemLabel(it)) + '</span><span class="mopen">текст</span></button><button class="icon" data-act="play" data-n="' + it.n + '" data-a="' + it.s + '" data-b="' + it.e + '" aria-label="Слушать">' + ICON.play + "</button></li>";
     }).join("") + "</ul>";
     else h += '<p class="muted">Свободный день: повторите слабые места.</p>';
     h += '<button class="btn ' + (doneT ? "done-btn" : "primary") + ' wide" data-act="manzil" data-d="' + t + '">' + (doneT ? ICON.check + " Прочитан" : "Отметить прочитанным") + "</button>";
@@ -676,7 +742,7 @@
   function blockRow(n, b, i, total) {
     var key = n + ":" + i, open = view.openB === key, dn = blockDone(n, b);
     var h = '<li class="brow' + (dn ? " done" : "") + (open ? " open" : "") + '"><button class="tick' + (dn ? " on" : "") + '" data-act="block-toggle" data-n="' + n + '" data-i="' + i + '" aria-label="' + (dn ? "Снять отметку" : "Отметить выученным") + '">' + ICON.check + "</button>" +
-      '<button class="bmain" data-act="toggle-block" data-n="' + n + '" data-i="' + i + '" aria-expanded="' + open + '"><span class="br">' + rng(b.s, b.e) + '</span><span class="bn">' + esc(b.name) + '</span><span class="chev">' + ICON.chev + "</span></button>";
+      '<button class="bmain" data-act="toggle-block" data-n="' + n + '" data-i="' + i + '" aria-expanded="' + open + '"><span class="br">' + rng(b.s, b.e) + '</span><span class="bt"><span class="bn">' + esc(b.name) + "</span>" + (b.d ? '<span class="bd">' + esc(b.d) + "</span>" : "") + '</span><span class="chev">' + ICON.chev + "</span></button>";
     if (open) {
       var chk = view.check[key], hint = view.hint[key], edit = view.edit === key;
       h += '<div class="bbody"><div class="btools">' +
@@ -712,7 +778,7 @@
       var p = parts[i], dd = addDays(ci.start, i), dn = !!state.manzil[dd];
       h += '<div class="mday' + (dd === t ? " today" : "") + (dn ? " done" : "") + '"><div class="md-head"><div><b>' + esc(dayLabel(i)) + '</b><span class="muted small">' + esc(niceShort(dd)) + (p ? " · ≈ " + p.pages.toFixed(1) + " стр." : "") + "</span></div>" +
         '<button class="tick lg' + (dn ? " on" : "") + '" data-act="manzil" data-d="' + dd + '" aria-label="' + esc(dayLabel(i)) + ': повторено" aria-pressed="' + dn + '">' + ICON.check + "</button></div>";
-      if (p) h += "<ul>" + p.items.map(function (it) { return "<li>" + esc(itemLabel(it)) + "</li>"; }).join("") + "</ul>";
+      if (p) h += '<ul class="mdl">' + p.items.map(function (it) { return '<li><button class="link plain" data-act="read" data-n="' + it.n + '" data-a="' + it.s + '" data-b="' + it.e + '">' + esc(itemLabel(it)) + "</button></li>"; }).join("") + "</ul>";
       else h += '<p class="muted small">Свободный день</p>';
       h += "</div>";
     }
@@ -774,9 +840,10 @@
   /* ---------------- оверлеи ---------------- */
   function renderOverlay() {
     var o = document.getElementById("overlay");
-    document.body.classList.toggle("locked", !!(view.ob || view.tafsir || view.pick));
+    document.body.classList.toggle("locked", !!(view.ob || view.tafsir || view.pick || view.reader));
     if (view.ob) { o.innerHTML = '<div class="overlay"><div class="sheet" role="dialog" aria-labelledby="ob-t">' + obHtml() + "</div></div>"; return; }
     if (view.tafsir) { o.innerHTML = '<div class="overlay" data-act="close"><div class="sheet" role="dialog" aria-labelledby="tf-t">' + tafsirHtml() + "</div></div>"; return; }
+    if (view.reader) { o.innerHTML = '<div class="overlay" data-act="close"><div class="sheet" role="dialog" aria-labelledby="rd-t">' + readerHtml() + "</div></div>"; return; }
     if (view.pick) {
       var start = state.set.direction === "start", nx = suggestNext(), list = SURAS.slice();
       if (!start) list.reverse();
@@ -869,6 +936,15 @@
       (b < count(n) ? '<button class="btn sm" data-act="tafsir-step" data-d="1">Аят ' + (b + 1) + " →</button>" : "<span></span>") + "</div>";
     return h;
   }
+  function readerHtml() {
+    var r = view.reader, x = SURAS[r.n - 1];
+    var h = '<div class="sheet-head"><div><h2 id="rd-t">' + esc(x.ru) + '</h2><span class="muted small">' + (r.s === 1 && r.e === x.ayahs ? ayahsW(x.ayahs) : "аяты " + rng(r.s, r.e)) + '</span></div><button class="icon" data-act="close" aria-label="Закрыть">' + ICON.close + "</button></div>";
+    h += '<div class="sheet-body"><div class="text">';
+    for (var a = r.s; a <= r.e; a++) h += ayahHtml(r.n, a, {});
+    h += "</div></div>";
+    h += '<div class="sheet-foot"><button class="btn sm" data-act="play" data-n="' + r.n + '" data-a="' + r.s + '" data-b="' + r.e + '">' + ICON.play + ' Слушать</button><button class="btn sm" data-act="tafsir" data-n="' + r.n + '" data-a="' + r.s + '">Тафсир</button></div>';
+    return h;
+  }
   function openTafsir(n, a, b) {
     view.tafsir = { n: n, a: a, b: b || a, err: "" };
     render();
@@ -932,7 +1008,8 @@
       case "range-all": setRange(n, 1, count(n)); view.rangeEdit = false; view.openB = null; save(); break;
       case "set-current": state.current = n; view.pick = false; range(n); blocksOf(n); save(); toast("Учим «" + SURAS[n - 1].ru + "»"); break;
       case "pick": view.pick = true; break;
-      case "close": view.pick = false; view.tafsir = null; break;
+      case "close": if (view.tafsir) view.tafsir = null; else { view.pick = false; view.reader = null; } break;
+      case "read": view.reader = { n: n, s: +el.getAttribute("data-a"), e: +el.getAttribute("data-b") }; break;
       case "check-mode": var ck = n + ":" + i; view.check[ck] = view.check[ck] ? 0 : 1; break;
       case "hint-mode": var hk = n + ":" + i; view.hint[hk] = !view.hint[hk]; break;
       case "reveal": view.check[n + ":" + i]++; break;
@@ -1073,7 +1150,7 @@
     if (el.id === "st-listen") { state.set.listen = el.checked; save(); }
   });
   document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && (view.tafsir || view.pick)) { view.tafsir = null; view.pick = false; render(); }
+    if (e.key === "Escape" && (view.tafsir || view.pick || view.reader)) { if (view.tafsir) view.tafsir = null; else { view.pick = false; view.reader = null; } render(); }
   });
 
   boot();
