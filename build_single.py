@@ -25,8 +25,10 @@ def main():
         'url(data:font/ttf;base64,%s) format("truetype")' % font)
 
     html = read("index.html")
+    # в однофайловой версии нет манифеста и service worker
+    html = re.sub(r'<link rel="(manifest|apple-touch-icon)"[^>]*>\n?', "", html)
     html = html.replace('<link rel="stylesheet" href="static/style.css">', "<style>\n" + css + "\n</style>")
-    for path in ("data.js", "data/quran.js", "data/themes.js", "blocks.js", "app.js"):
+    for path in ("data.js", "data/quran.js", "data/themes.js", "data/meta.js", "blocks.js", "app.js"):
         js = read("static", *path.split("/")).replace("</script", "<\\/script")
         html = html.replace('<script src="static/%s"></script>' % path, "<script>\n" + js + "\n</script>")
     if "static/" in re.sub(r"<script>.*?</script>|<style>.*?</style>", "", html, flags=re.S):

@@ -44,7 +44,7 @@ def load_tafsir(n):
 
 
 class Handler(SimpleHTTPRequestHandler):
-    extensions_map = dict(SimpleHTTPRequestHandler.extensions_map, **{".ttf": "font/ttf", ".js": "text/javascript"})
+    extensions_map = dict(SimpleHTTPRequestHandler.extensions_map, **{".ttf": "font/ttf", ".js": "text/javascript", ".webmanifest": "application/manifest+json"})
 
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=ROOT, **kw)

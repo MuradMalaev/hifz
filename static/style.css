@@ -385,3 +385,223 @@ body.has-player .toast { bottom: calc(96px + var(--nav-h) + env(safe-area-inset-
 .mdl li { list-style: none; }
 .link.plain { color: var(--ink); font-weight: 500; text-align: left; font-size: 14px; }
 @media (max-width: 640px) { .mitem .ar { display: none; } }
+
+/* ===================== v5: новые функции ===================== */
+button.progress { border: 0; background: none; padding: 6px 8px; margin: -6px -8px; border-radius: 14px; text-align: left; color: inherit; }
+button.progress:hover { background: var(--leaf); }
+.progress > span { display: grid; }
+
+/* прогресс суры */
+.sbar { display: flex; gap: 1px; height: 6px; border-radius: 3px; overflow: hidden; }
+.sbar i { flex: 1; background: var(--line); }
+.sbar i.d { background: var(--green); }
+.sbar i.t { background: var(--gilt); }
+
+/* повторы: три оценки */
+.rlist li { display: grid; gap: 8px; padding: 10px 0; }
+.rtop { display: flex; align-items: center; gap: 8px; }
+.rl { flex: 1; min-width: 0; display: grid; border: 0; background: none; padding: 0; text-align: left; }
+.grades { display: flex; gap: 6px; flex-wrap: wrap; }
+.gbtn { flex: 1; border: 1px solid var(--line); background: var(--leaf); border-radius: 10px; padding: 7px 8px; font-weight: 700; font-size: 13px; white-space: nowrap; }
+.gbtn.easy { color: var(--green); }
+.gbtn.forgot { color: var(--warn); }
+.gbtn:hover { border-color: currentColor; }
+.rev .grades { flex: 1 1 260px; }
+.weak-line { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: var(--paper); border-radius: 12px; padding: 10px 12px; font-weight: 600; text-align: left; }
+.weak-line span { flex: 1; }
+.weak-line b { font-size: 13px; color: var(--warn); }
+.weak-line svg { color: var(--ink-soft); }
+
+/* пропущенный манзиль */
+.miss { display: grid; gap: 8px; padding: 12px; border-radius: 12px; background: var(--gilt-soft); font-size: 14px; }
+.miss-btns { display: flex; gap: 8px 12px; flex-wrap: wrap; align-items: center; }
+.sub { font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); margin: 4px 0 -6px; }
+
+/* маршрут суры из якорей */
+.route { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; padding: 8px 10px; border-radius: 12px; background: var(--paper); }
+.anc { border: 0; background: none; padding: 2px 4px; border-radius: 6px; font: 20px/1.6 var(--f-quran); color: var(--ink); }
+.anc.done { color: var(--green); }
+.anc:hover { background: var(--gilt-soft); }
+.route .sep { color: var(--gilt); }
+
+/* скрытие слов, запись, подсветка */
+.hw { color: transparent; border-bottom: 2px dotted var(--gilt); cursor: pointer; border-radius: 2px; }
+.hw.show { color: inherit; border-bottom-color: transparent; background: var(--gilt-soft); }
+.ayah.hl { border-color: var(--gilt); }
+.icon.rec { background: var(--warn); color: #fff; }
+@media (prefers-reduced-motion: no-preference) { .icon.rec { animation: pulse 1.2s ease-in-out infinite; } @keyframes pulse { 50% { opacity: .55; } } }
+
+/* поиск по тексту */
+.sec { font: 600 20px/1.2 var(--f-display); margin: 22px 0 10px; }
+.hits { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.hits button { width: 100%; display: grid; gap: 4px; text-align: left; border: 0; background: var(--leaf); box-shadow: var(--shadow); border-radius: 12px; padding: 10px 14px; }
+.hits .hl { font-size: 12.5px; font-weight: 800; color: var(--gilt); }
+.hits .ht { font-size: 14px; color: var(--ink-soft); }
+.hits .ha { font: 20px/1.8 var(--f-quran); text-align: right; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+mark { background: var(--gilt-soft); color: var(--ink); border-radius: 3px; padding: 0 2px; }
+
+/* суры по джузам */
+.juz { margin-bottom: 8px; }
+.jhead { width: 100%; display: flex; align-items: center; gap: 12px; border: 0; background: var(--leaf); box-shadow: var(--shadow); border-radius: 14px; padding: 10px 14px 10px 10px; text-align: left; }
+.juz.open .jhead { margin-bottom: 8px; }
+.jt { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.jt b { font: 600 19px/1.2 var(--f-display); }
+.jt > span:not(.jbar) { font-size: 12.5px; color: var(--ink-soft); }
+.jbar { display: block; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin-top: 4px; }
+.jbar i { display: block; height: 100%; background: var(--green); }
+.juz .chev { color: var(--ink-soft); transition: transform .2s; }
+.juz.open .chev { transform: rotate(90deg); }
+.jcont { margin: 0 4px 8px; }
+.medal.sm { width: 40px; height: 40px; }
+.medal.sm b { font-size: 12px; }
+
+/* окна: слабые места, журнал, самопроверка, путь */
+.wlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.wlist li { display: grid; gap: 8px; padding: 12px; border-radius: 12px; background: var(--paper); }
+.wlist li > div:first-child { display: grid; gap: 2px; }
+.wbtns { display: flex; gap: 8px; }
+.jlist { display: grid; gap: 8px; }
+.jrow { display: grid; gap: 4px; padding: 10px 12px; border-radius: 12px; background: var(--paper); }
+.jrow > div { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.jwrap { display: grid; gap: 4px; justify-items: end; }
+.jwrap .jrow { width: 100%; }
+.tag.great { background: var(--green-soft); color: var(--green); }
+.tag.repeat { background: var(--gilt-soft); color: var(--warn); }
+.field select { padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); width: 100%; }
+.field textarea.note { min-height: 80px; }
+.qq { font-weight: 700; font-size: 16px; }
+.ayah.ans { background: var(--green-soft); }
+.qopts { display: grid; gap: 8px; }
+.qopt { display: flex; justify-content: space-between; align-items: center; gap: 10px; border: 1.5px solid var(--line); background: var(--leaf); border-radius: 12px; padding: 12px 14px; text-align: left; }
+.qopt .ar { font: 19px/1 var(--f-arabic); color: var(--gilt); }
+.qopt.right { border-color: var(--green); background: var(--green-soft); }
+.qopt.wrong { border-color: var(--warn); }
+.qopt:disabled { cursor: default; color: var(--ink); }
+.score { font: 600 44px/1.1 var(--f-display); color: var(--green); }
+.path-sum { display: grid; gap: 2px; }
+.path-sum b { font: 600 28px/1.1 var(--f-display); }
+.path-sum span { color: var(--ink-soft); font-size: 14px; }
+.jgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 6px; justify-items: center; }
+.miles { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.miles li { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-bottom: 1px solid var(--line); color: var(--ink-soft); }
+.miles li.on { color: var(--ink); }
+.miles li i { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--line); display: grid; place-items: center; color: var(--on-accent); flex: none; }
+.miles li.on i { background: var(--gilt); border-color: var(--gilt); }
+.miles li span { flex: 1; min-width: 0; }
+.mdate { border: 1px solid var(--line); border-radius: 8px; background: var(--paper); padding: 4px 6px; font-size: 13px; color: var(--ink); }
+.celebrate .sheet-body { justify-items: center; text-align: center; padding-top: 28px; }
+.celebrate .medal.xl b { color: var(--on-accent); }
+.dua { font: 30px/1.6 var(--f-quran); color: var(--gilt); }
+.sheet-foot.center { justify-content: center; }
+.tf-mid { display: flex; justify-content: center; }
+@media (max-width: 640px) {
+  .gbtn { padding: 8px 4px; }
+  .miss-btns .btn { flex: 1; }
+  .jgrid { grid-template-columns: repeat(6, 1fr); }
+}
+
+/* ===================== v6 ===================== */
+/* вид списка сур */
+.viewbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: -4px 0 14px; }
+.sortbtn { border: 1px solid var(--line); background: var(--leaf); border-radius: 10px; padding: 7px 12px; font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+.hnum { width: 40px; height: 40px; flex: none; border-radius: 50%; border: 1.5px solid var(--line); display: grid; place-items: center; font-weight: 800; font-size: 13px; font-variant-numeric: tabular-nums; }
+.hnum.on { background: var(--green); border-color: var(--green); color: var(--on-accent); }
+.rubs { list-style: none; margin: 0 0 8px; padding: 4px 6px; display: grid; gap: 2px; background: var(--leaf); border-radius: 14px; box-shadow: var(--shadow); }
+.rubs li { display: flex; align-items: baseline; gap: 10px; padding: 8px 8px; border-bottom: 1px solid var(--line); }
+.rubs li:last-child { border-bottom: 0; }
+.rq { width: 22px; flex: none; color: var(--gilt); font-weight: 800; text-align: center; }
+.rsegs { flex: 1; min-width: 0; font-size: 14px; }
+.rp { font-size: 12.5px; font-weight: 700; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.rp.on { color: var(--green); }
+
+/* отметки в манзиле */
+.tick.sm { width: 24px; height: 24px; margin: 0; }
+.tick.xs { width: 20px; height: 20px; margin: 0; border-width: 1.5px; }
+.tick.xs svg { width: 11px; height: 11px; }
+.mlist li.done .mitem span:nth-child(2) { color: var(--ink-soft); text-decoration: line-through; text-decoration-color: var(--line); }
+.mdl li { display: flex; align-items: center; gap: 8px; }
+.mdl li.done .link.plain { color: var(--ink-soft); }
+.hz-l { margin-top: -8px; }
+
+/* номер аята = отметка */
+.ay-n { border: 1px solid var(--line); background: var(--leaf); border-radius: 999px; padding: 2px 9px; display: inline-flex; gap: 3px; align-items: center; color: var(--gilt); font-weight: 800; font-size: 12px; margin-right: auto; min-height: 26px; }
+.ay-n.on { background: var(--green); border-color: var(--green); color: var(--on-accent); }
+.ay-n svg { width: 11px; height: 11px; }
+
+/* свёрнутое выученное */
+.brow.fold .tick { margin-left: 6px; }
+.brow.fold .bn { color: var(--green); font-weight: 700; }
+
+/* о суре, завершение */
+.about p { font-size: 14.5px; line-height: 1.6; }
+.done-sum { font-weight: 700; }
+.celebrate .medal.xl b { color: var(--on-accent); }
+.celebrate .steps { justify-content: center; }
+
+/* шапка суры при прокрутке */
+.stickhead { position: fixed; left: 0; right: 0; top: 0; z-index: 7; display: flex; align-items: baseline; justify-content: center; gap: 10px; padding: 9px 16px; background: var(--leaf); border-bottom: 1px solid var(--line); box-shadow: var(--shadow); transform: translateY(-120%); transition: transform .2s; font-size: 14px; }
+.stickhead.on { transform: none; }
+.stickhead b { font: 600 18px/1.2 var(--f-display); }
+.stickhead span { color: var(--ink-soft); font-size: 13px; }
+
+/* мастер: джузы */
+.known.jl > li { flex-wrap: wrap; }
+.jrowk.on { background: var(--green-soft); }
+.jrowk.part { background: var(--gilt-soft); }
+.jrowk.part > .kmain .kbox { background: var(--gilt); border-color: var(--gilt); }
+.kpart.open-j { border-style: solid; border-color: var(--line); color: var(--ink-soft); }
+.known.sub-k { flex-basis: 100%; max-height: none; margin: 0 0 8px 28px; background: var(--leaf); border-radius: 12px; }
+.known.sub-k li.on { background: var(--green-soft); }
+
+/* размер интерфейса */
+:root[data-ui="lg"] body { font-size: 17px; }
+:root[data-ui="xl"] body { font-size: 19px; }
+:root[data-ui="lg"] .btn, :root[data-ui="lg"] .tool, :root[data-ui="lg"] .segb, :root[data-ui="lg"] .gbtn, :root[data-ui="lg"] .chip, :root[data-ui="lg"] .step { font-size: 16px; padding-top: 10px; padding-bottom: 10px; }
+:root[data-ui="xl"] .btn, :root[data-ui="xl"] .tool, :root[data-ui="xl"] .segb, :root[data-ui="xl"] .gbtn, :root[data-ui="xl"] .chip, :root[data-ui="xl"] .step { font-size: 18px; padding-top: 13px; padding-bottom: 13px; }
+:root[data-ui="lg"] .icon { width: 44px; height: 44px; }
+:root[data-ui="xl"] .icon { width: 52px; height: 52px; }
+:root[data-ui="lg"] .tick { width: 32px; height: 32px; }
+:root[data-ui="xl"] .tick { width: 38px; height: 38px; }
+:root[data-ui="lg"] .tab, :root[data-ui="xl"] .tab { font-size: 15px; }
+:root[data-ui="lg"] .small, :root[data-ui="lg"] .bd, :root[data-ui="lg"] .sl-t span { font-size: 14.5px; }
+:root[data-ui="xl"] .small, :root[data-ui="xl"] .bd, :root[data-ui="xl"] .sl-t span { font-size: 16px; }
+:root[data-ui="xl"] h2 { font-size: 26px; }
+:root[data-ui="lg"] .ay-n, :root[data-ui="xl"] .ay-n { font-size: 14px; min-height: 32px; padding: 4px 12px; }
+
+/* высокий контраст */
+:root[data-contrast="high"] { --ink: #0B1511; --ink-soft: #2C3934; --line: #A9B6AE; --gilt: #7A520C; --green: #145442; }
+@media (prefers-color-scheme: dark) {
+  :root[data-contrast="high"]:not([data-theme="light"]) { --ink: #FFFFFF; --ink-soft: #D6E1DB; --line: #52695F; --gilt: #EDC67A; --green: #7FD8B8; }
+}
+:root[data-theme="dark"][data-contrast="high"] { --ink: #FFFFFF; --ink-soft: #D6E1DB; --line: #52695F; --gilt: #EDC67A; --green: #7FD8B8; }
+:root[data-contrast="high"] .card, :root[data-contrast="high"] .sura, :root[data-contrast="high"] .jhead, :root[data-contrast="high"] .mday { box-shadow: 0 0 0 1px var(--line); }
+
+/* ===== v7: манзиль со «Свежим», слова по аятам, якоря аятов ===== */
+.sub .count { font-size: 11px; letter-spacing: 0; padding: 0 7px; margin-left: 4px; vertical-align: 1px; }
+.card.fresh .fresh-note { font-size: 13px; color: var(--ink-soft); margin: -6px 0 0; }
+.ayah.closed { background: var(--paper); border: 1px dashed var(--line); padding-bottom: 6px; }
+.ayah.closed .ay-n { margin-right: 8px; }
+.peekbtns { display: inline-flex; gap: 4px; margin-right: auto; }
+.wbtn { border: 1px solid var(--gilt); background: var(--leaf); color: var(--gilt); border-radius: 999px; padding: 2px 10px; min-height: 26px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.wbtn:active { background: var(--gilt-soft); }
+.wbtn + .wbtn { border-color: var(--line); color: var(--ink-soft); }
+.ayah .more { color: var(--gilt); font-family: var(--f-body); letter-spacing: 2px; }
+.route .anc { font-size: 17px; padding: 1px 4px; display: inline-flex; align-items: baseline; gap: 2px; }
+.anc sup { font-size: 10px; font-weight: 800; color: var(--gilt); font-family: var(--f-body); line-height: 1; }
+.anc-edit { display: grid; gap: 8px; }
+.anc-edit > span { font-size: 13px; color: var(--ink-soft); font-weight: 600; }
+.anc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+.anc-grid label { display: flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 10px; padding: 2px 4px 2px 8px; background: var(--paper); min-width: 0; }
+.anc-grid label span { font-size: 11px; font-weight: 800; color: var(--gilt); font-variant-numeric: tabular-nums; flex: none; }
+.anc-grid input { flex: 1; min-width: 0; width: 100%; border: 0; background: transparent; padding: 4px 2px; font: 17px/1.5 var(--f-quran); color: var(--ink); text-align: right; }
+.anc-grid input:focus { outline: none; }
+.anc-grid label:focus-within { border-color: var(--gilt); }
+@keyframes ayflash { 0% { background: var(--gilt-soft); border-color: var(--gilt); } 100% { background: var(--leaf); border-color: transparent; } }
+.ayah.flash { animation: ayflash 1.6s ease-out; }
+.ayah.closed { padding-top: 8px; gap: 2px; }
+.ayah.closed .a.hidden-ar { font-size: 22px; line-height: 1.5; }
+.ayah.closed .a[dir="rtl"] { font-size: .92em; }
+.bedit .anc-edit { grid-column: 1 / -1; padding-top: 4px; }
+.bedit .anc-edit > span { font-size: 12.5px; }
+.bedit .anc-grid label { display: flex; gap: 4px; font-size: 11px; }
+.bedit .anc-grid input { border: 0; background: transparent; padding: 4px 2px; font: 17px/1.5 var(--f-quran); }
