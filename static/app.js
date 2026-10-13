@@ -9,7 +9,7 @@
   var RUB = window.HIFZ_RUB || [], ORDER = window.HIFZ_ORDER || [], ASBAB = window.HIFZ_ASBAB || {};
   var QNAME = ["", "¼", "½", "¾"];
   var B = window.HifzBlocks;
-  var BLOCKS_VER = 4; // при смене тематических данных автоматические блоки пересчитываются
+  var BLOCKS_VER = 5; // при смене тематических данных автоматические блоки пересчитываются
   var DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
   var DAYS_FULL = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"];
   var KEY = "hifz.state.v2";
@@ -17,7 +17,8 @@
   var NORMS = [[0.25, "¼ страницы"], [0.5, "½ страницы"], [1, "1 страница"]];
   var SIZES = [["short", "Короче"], ["std", "Стандартно"], ["long", "Длиннее"]];
   var GRADES = [["easy", "Легко"], ["hard", "С запинками"], ["forgot", "Забыл"]];
-  var LESSON_GRADES = [["great", "Отлично"], ["good", "Хорошо"], ["repeat", "Повторить"]];
+  var LESSON_GRADES = [["great", "Отлично"], ["good", "Хорошо"], ["repeat", "Повторить"]]; // старые записи журнала
+  var MARKS = [[5, "отлично"], [4, "хорошо"], [3, "удовл."], [2, "плохо"]];
   var HIDE = [0, 5, 3, 2, 1], HIDE_LABEL = ["", "⅕", "⅓", "½", "всё"];
   var PARTIAL_MIN = 20;
   var STOPS = /[ۖ-ۭ]/g;
@@ -44,13 +45,13 @@
   }
   function blank() {
     return { v: 2, bver: BLOCKS_VER, setup: false, set: defaults(), current: null, suras: {}, reviews: [], manzil: {}, anchor: today(), log: [],
-      weak: [], journal: [], days: {}, miles: {}, carry: {}, mskip: {}, mitems: {}, mshift: 0, started: today() };
+      weak: [], journal: [], days: {}, miles: {}, carry: {}, mskip: {}, mitems: {}, mshift: 0, started: today(), keep: [], mz: null };
   }
   function newOb() { return { step: 0, picks: {}, q: "", partial: null, tr: false, tf: false, mode: "juz", jopen: {} }; }
   var state = null, mode = "local";
   var view = { tab: "today", sura: null, filter: "all", q: "", openB: null, edit: null, check: {}, hint: {}, hide: {}, dl: {}, tafFull: {},
     pick: false, tafsir: null, reader: null, sheet: null, celebrate: null, done: null, quiz: null, lesson: null, ob: null, confirm: null, rangeEdit: false, jopen: null,
-    wordRev: {}, showLearned: false, scroll: {} };
+    wordRev: {}, showLearned: false, scroll: {}, plain: {}, split: null, keepOpen: {} };
 
   function S(n) {
     var s = state.suras[n];
@@ -289,11 +290,48 @@
   var partsCache = null;
   /* Манзиль: всё выученное делится на части, близкие по объёму.
      По объёму — большие отрывки режутся по аятам; по хизбам — границы только по четвертям хизба. */
+  /* Новое выученное входит в манзиль только с начала следующего круга (недели):
+     в начале круга запоминается снимок выученного, и до конца круга деление не меняется. */
+  function syncMz() {
+    var st = cycleInfo().start;
+    if (state.mz && state.mz.start === st) return false;
+    var snap = {};
+    Object.keys(state.suras).forEach(function (k) { var d = state.suras[k].done; if (d && d.indexOf("1") !== -1) snap[k] = d; });
+    state.mz = { start: st, done: snap };
+    return true;
+  }
+  function inMz(n, a) { var d = state.mz && state.mz.done[n]; return !!(d && d.charAt(a - 1) === "1"); }
+  function mzRuns(n, pending) {
+    var out = [], st = null, c = count(n);
+    for (var i = 1; i <= c + 1; i++) {
+      var d = i <= c && isDone(n, i) && (pending ? !inMz(n, i) : inMz(n, i));
+      if (d && st === null) st = i;
+      if (!d && st !== null) { out.push([st, i - 1]); st = null; }
+    }
+    return out;
+  }
+  function mzAdd(n, a, b) {
+    if (!state.mz) return;
+    var c = count(n), d = ((state.mz.done[n] || "") + new Array(c + 1).join("0")).slice(0, c).split("");
+    for (var i = a; i <= b; i++) d[i - 1] = "1";
+    state.mz.done[n] = d.join("");
+  }
+  function mzPending() {
+    var out = [];
+    SURAS.forEach(function (x) { if (x.n === 1 || !state.suras[x.n]) return; mzRuns(x.n, true).forEach(function (r) { out.push({ n: x.n, s: r[0], e: r[1] }); }); });
+    return out;
+  }
+  function mzWaitHtml() {
+    var pend = mzPending();
+    if (!pend.length) return "";
+    var ci = cycleInfo(), nx = addDays(ci.start, ci.cyc);
+    return '<p class="mz-wait">' + ICON.clock + "<span>С " + esc(niceShort(nx)) + ": " + esc(pend.map(itemLabel).join(", ")) + '</span><button class="link" data-act="mz-now">сейчас</button></p>';
+  }
   function manzilParts() {
     var cyc = state.set.cycle, hizbMode = state.set.manzilMode === "hizb", units = [], total = 0;
     SURAS.forEach(function (x) {
       if (x.n === 1) return;
-      runs(x.n).forEach(function (r) { var w = pagesOf(x.n, r[0], r[1]); units.push({ n: x.n, s: r[0], e: r[1], w: w }); total += w; });
+      mzRuns(x.n).forEach(function (r) { var w = pagesOf(x.n, r[0], r[1]); units.push({ n: x.n, s: r[0], e: r[1], w: w }); total += w; });
     });
     if (!units.length) return [];
     var elems = [];
@@ -745,6 +783,7 @@
     chev: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>',
     mic: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
     stop: '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>',
+    clock: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
     cmp: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M17 4v16M3 9h8M13 15h8"/></svg>'
   };
   var STAR = "M32 6 L39.4 14.1 L50.4 13.6 L49.9 24.6 L58 32 L49.9 39.4 L50.4 50.4 L39.4 49.9 L32 58 L24.6 49.9 L13.6 50.4 L14.1 39.4 L6 32 L14.1 24.6 L13.6 13.6 L24.6 14.1 Z";
@@ -808,6 +847,7 @@
   /* ---------------- отрисовка ---------------- */
   function render() {
     if (!state) return;
+    if (state.setup && syncMz()) save();
     var tabs = document.querySelectorAll(".tab");
     for (var i = 0; i < tabs.length; i++) tabs[i].setAttribute("aria-current", tabs[i].getAttribute("data-tab") === (view.sura ? "suras" : view.tab) ? "page" : "false");
     var html;
@@ -833,11 +873,16 @@
       '<button class="progress" data-act="sheet" data-v="path" aria-label="Путь: прогресс и вехи"><svg viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="' + R + '" class="pr-track"/><circle cx="26" cy="26" r="' + R + '" class="pr-arc" stroke-dasharray="' + (C * Math.min(st.pct, 100) / 100).toFixed(1) + " " + C.toFixed(1) + '" transform="rotate(-90 26 26)"/></svg>' +
       "<span><b>" + num1(st.pct) + "% Корана</b><span>≈ " + (st.pages < 10 ? num1(st.pages) : Math.round(st.pages)) + " из 604 стр. · " + num1(st.pages / 20) + " джуза</span><span>" +
       st.hifz + " " + plural(st.hifz, "сура", "суры", "сур") + " наизусть" + (sk > 1 ? " · " + sk + " " + plural(sk, "день", "дня", "дней") + " подряд" : "") + "</span></span></button></div>";
-    h += '<div class="day"><div class="col">' + (set.ustaz.indexOf(wd) !== -1 ? ustazNote() : "") + sabakCard() + '</div><div class="col">' + manzilCard() + "</div></div>";
+    h += '<div class="day"><div class="col">' + (set.ustaz.indexOf(wd) !== -1 ? (state.journal.some(function (j) { return j.d === t; }) ? "" : ustazNote()) : set.ustaz.length ? "" : hwNote()) + sabakCard() + keepCards() + '</div><div class="col">' + manzilCard() + "</div></div>";
     return h;
   }
 
   function ustazNote() {
+    var hj = lastHw();
+    if (hj && hj.d < today()) {
+      return '<div class="note-ustaz lesson"><b>Сегодня урок с устазом</b>' + hwBody(hj.hw) +
+        '<button class="btn sm primary" data-act="lesson-new">Записать урок</button></div>';
+    }
     var n = state.current, due = dueReviews(), items = [];
     if (n) {
       var learned = blocksOf(n).filter(function (b) { return blockDone(n, b); });
@@ -882,10 +927,8 @@
       h += '<li class="brow done fold"><span class="tick on" aria-hidden="true">' + ICON.check + '</span><button class="bmain" data-act="show-learned"><span class="bt"><span class="bn">Выучено: аяты ' + lr.map(function (x) { return rng(x[0], x[1]); }).join(", ") + '</span><span class="bd">' + learnedB.length + " " + plural(learnedB.length, "блок", "блока", "блоков") + ' · показать</span></span></button><button class="icon" data-act="play" data-n="' + n + '" data-a="' + learnedB[0].s + '" data-b="' + learnedB[learnedB.length - 1].e + '" aria-label="Слушать выученное">' + ICON.play + "</button></li>";
     }
     h += bl.map(function (b, i) {
-      var dn = blockDone(n, b);
-      if (fold && dn) return "";
-      return '<li class="brow' + (dn ? " done" : "") + (i === nb ? " cur" : "") + '"><button class="tick' + (dn ? " on" : "") + '" data-act="block-toggle" data-n="' + n + '" data-i="' + i + '" aria-label="' + (dn ? "Снять отметку" : "Отметить выученным") + '">' + ICON.check + "</button>" +
-        blockMain(n, b, "open-block", i, false) + '<button class="icon" data-act="play-block" data-n="' + n + '" data-i="' + i + '" aria-label="Слушать блок">' + ICON.play + "</button></li>";
+      if (fold && blockDone(n, b)) return "";
+      return blockRow(n, b, i, bl.length, i === nb);
     }).join("") + "</ol>";
     if (learnedB.length >= 2 && view.showLearned) h += '<button class="link" data-act="show-learned">свернуть выученное</button>';
     if (nb > 0) h += '<p class="hint">Перед новым блоком прочитайте выученные подряд.</p>';
@@ -894,6 +937,18 @@
     if (remJ > 0.001) parts.push("джуз " + (j + 1) + " — " + nice(finishDate(remJ)));
     if (parts.length) h += '<p class="forecast">При вашей норме: ' + parts.join(", ") + "</p>";
     return h + "</section>";
+  }
+
+  /* выученные суры, оставленные на главной */
+  function keepCards() {
+    return state.keep.filter(function (n) { return n !== state.current; }).map(function (n) {
+      var x = SURAS[n - 1], op = !!view.keepOpen[n];
+      var h = '<section class="card keep' + (op ? " open" : "") + '"><div class="keep-row"><button class="sura-line" data-act="keep-open" data-n="' + n + '" aria-expanded="' + op + '">' + medal(n, "md") +
+        '<span class="sl-t"><b>' + esc(x.ru) + "</b><span>" + (hifz(n) ? "наизусть" : doneCount(n) + " из " + x.ayahs) + " · " + ayahsW(x.ayahs) + '</span></span><span class="chev">' + ICON.chev + "</span></button>" +
+        '<button class="icon" data-act="play" data-n="' + n + '" data-a="1" data-b="' + x.ayahs + '" aria-label="Слушать суру">' + ICON.play + "</button></div>";
+      if (op) { var bl = blocksOf(n); h += '<ol class="blist">' + bl.map(function (bb, i) { return blockRow(n, bb, i, bl.length, false); }).join("") + "</ol>"; }
+      return h + "</section>";
+    }).join("");
   }
 
   /* свежевыученное: повторы по интервалам — часть манзиля */
@@ -907,7 +962,7 @@
   }
   function nextFresh() {
     var up = state.reviews.slice().sort(function (a, b) { return a.next < b.next ? -1 : 1; })[0];
-    return up ? '<p class="muted small">Свежее: следующий повтор — ' + esc(rLabel(up)) + ", " + esc(niceShort(up.next)) + ".</p>" : "";
+    return up ? '<p class="muted small">Следующий повтор — ' + esc(rLabel(up)) + ", " + esc(niceShort(up.next)).replace(/\.$/, "") + ".</p>" : "";
   }
   function weakLine() {
     return state.weak.length ? '<button class="weak-line" data-act="sheet" data-v="weak"><span>Слабые места</span><b>' + state.weak.length + "</b>" + ICON.chev + "</button>" : "";
@@ -1064,15 +1119,18 @@
     if (state.current !== n && !hifz(n)) h += '<button class="btn primary wide" data-act="set-current" data-n="' + n + '">Учить эту суру</button>';
     h += aboutHtml(n);
 
-    h += '<section class="card"><div class="card-title"><h2>Блоки</h2><span class="muted small">' + d + " из " + c + " выучено</span></div>";
-    h += '<div class="range-line"><span>Учу аяты <b>' + rng(r[0], r[1]) + "</b></span>" + (view.rangeEdit ? "" : '<button class="link" data-act="range-edit">изменить</button>') + "</div>";
-    if (view.rangeEdit) {
-      h += '<div class="range-edit"><label>с <input type="number" id="ra" min="1" max="' + c + '" value="' + r[0] + '"></label><label>по <input type="number" id="rb" min="1" max="' + c + '" value="' + r[1] + '"></label>' +
-        '<button class="btn sm primary" data-act="set-range" data-n="' + n + '">Учить этот диапазон</button><button class="btn sm" data-act="know-range" data-n="' + n + '">Я уже знаю эти аяты</button><button class="link" data-act="range-all" data-n="' + n + '">вся сура</button></div>';
+    var plain = !!view.plain[n];
+    h += '<section class="card"><div class="card-title"><div class="seg mode-sw" role="group" aria-label="Вид суры"><button class="segb" data-act="sura-mode" data-n="' + n + '" data-v="0" aria-pressed="' + !plain + '">Блоки</button><button class="segb" data-act="sura-mode" data-n="' + n + '" data-v="1" aria-pressed="' + plain + '">Текст</button></div><span class="muted small">' + d + " из " + c + " выучено</span></div>";
+    if (plain) h += plainHtml(n);
+    else {
+      h += '<div class="range-line"><span>Блоки по аятам <b>' + rng(r[0], r[1]) + "</b></span>" + (view.rangeEdit ? "" : '<button class="link" data-act="range-edit" data-n="' + n + '">разделить на блоки</button>') + "</div>";
+      if (view.rangeEdit && view.split) h += splitHtml(n);
+      h += suraBar(n, null);
+      h += '<ol class="blist">' + bl.map(function (b, i) { return blockRow(n, b, i, bl.length); }).join("") + "</ol>";
+      h += '<div class="foot-links"><button class="link" data-act="reset-blocks" data-n="' + n + '">Пересчитать блоки</button>' + (s.bsrc === "custom" ? '<span class="muted small">есть ваши правки</span>' : "") +
+        (hifz(n) ? '<button class="link" data-act="keep" data-n="' + n + '">' + (state.keep.indexOf(n) !== -1 ? "убрать с главной" : "показывать на главной") + "</button>" : "") + "</div>";
     }
-    h += suraBar(n, null);
-    h += '<ol class="blist">' + bl.map(function (b, i) { return blockRow(n, b, i, bl.length); }).join("") + "</ol>";
-    h += '<div class="foot-links"><button class="link" data-act="reset-blocks" data-n="' + n + '">Пересчитать блоки</button>' + (s.bsrc === "custom" ? '<span class="muted small">есть ваши правки</span>' : "") + "</div></section>";
+    h += "</section>";
 
     var mine = state.reviews.filter(function (q) { return q.n === n; });
     if (mine.length) {
@@ -1082,12 +1140,31 @@
         return '<div class="rev"><div><b>Аяты ' + rng(q.s, q.e) + '</b><span class="muted small">следующий — ' + esc(nice(q.next)) + '</span><div class="dots">' + dots + "</div></div>" + (q.next <= today() ? gradeBtns(q.id) : "") + "</div>";
       }).join("") + "</section>";
     }
-    var lessons = state.journal.filter(function (j) { return j.n === n; });
+    var lessons = state.journal.filter(function (j) { return jItems(j).some(function (x) { return x.n === n; }); });
     h += '<section class="card"><div class="card-title"><h2>Конспект</h2><button class="link" data-act="tafsir" data-n="' + n + '" data-a="' + r[0] + '">тафсир Ибн Касира</button></div><textarea class="note" id="note-' + n + '" data-n="' + n + '" placeholder="О чём сура, главные мысли тафсира…">' + esc(s.note) + "</textarea>" +
       (lessons.length ? '<div class="jlist">' + lessons.slice(0, 5).map(lessonRow).join("") + "</div>" : "") + "</section>";
     h += '<div class="foot-links">' + (view.confirm === "sura" + n ? '<span class="warn-t">Сбросить прогресс суры?</span><button class="link warn" data-act="reset-sura" data-n="' + n + '">да, сбросить</button><button class="link" data-act="cancel">отмена</button>'
       : '<button class="link muted" data-act="ask" data-what="sura' + n + '">Сбросить прогресс суры</button>') + "</div>";
     return h + "</div>";
+  }
+
+  /* сура обычным текстом: арабский и перевод подряд, без блоков */
+  function plainHtml(n) {
+    var c = count(n), rs = rows(n), h = '<div class="plain-tools"><button class="tool" data-act="play" data-n="' + n + '" data-a="1" data-b="' + c + '">' + ICON.play + ' Слушать суру</button></div><div class="plain">';
+    for (var a = 1; a <= c; a++) {
+      h += '<div class="pa' + (isDone(n, a) ? " dn" : "") + '" id="ay-' + n + "-" + a + '"><div class="a" lang="ar" dir="rtl">' + esc(rs[a - 1][0]) + ' <span class="no">﴿' + arNum(a) + "﴾</span></div>" +
+        '<div class="t"><b>' + a + ".</b> " + esc(rs[a - 1][1]) + "</div></div>";
+    }
+    return h + "</div>";
+  }
+  /* деление всей суры или её части на блоки */
+  function splitHtml(n) {
+    var sp = view.split, c = count(n);
+    return '<div class="split"><div class="split-row"><label>с аята <input type="number" id="sp-a" min="1" max="' + c + '" value="' + sp.a + '"></label><label>по <input type="number" id="sp-b" min="1" max="' + c + '" value="' + sp.b + '"></label>' +
+      '<button class="link" data-act="split-all" data-n="' + n + '">вся сура</button></div>' +
+      '<div class="split-row"><div class="seg" role="group" aria-label="Как делить"><button class="segb" data-act="split-m" data-n="' + n + '" data-v="auto" aria-pressed="' + (sp.m === "auto") + '">По смыслу</button><button class="segb" data-act="split-m" data-n="' + n + '" data-v="eq" aria-pressed="' + (sp.m === "eq") + '">Поровну</button></div>' +
+      (sp.m === "eq" ? '<label>по <input type="number" id="sp-k" min="1" max="40" value="' + sp.k + '"> аятов</label>' : "") + "</div>" +
+      '<div class="split-btns"><button class="btn sm primary" data-act="split-go" data-n="' + n + '">Разделить</button><button class="link" data-act="know-range" data-n="' + n + '">уже знаю эти аяты</button><button class="link muted" data-act="cancel-split">отмена</button></div></div>';
   }
 
   var MECCAN_RANK = (function () {
@@ -1104,9 +1181,9 @@
       '<p><b>' + esc(type) + "</b> · " + period + (rank ? ' <span class="muted small">(условно)</span>' : "") + "</p>" +
       (ASBAB[n] ? "<p>" + esc(ASBAB[n]) + "</p>" : '<p class="muted small">Подробнее об обстоятельствах ниспослания — в тафсире Ибн Касира.</p>') + "</section>";
   }
-  function blockRow(n, b, i, total) {
+  function blockRow(n, b, i, total, cur) {
     var key = n + ":" + i, open = view.openB === key, dn = blockDone(n, b);
-    var h = '<li class="brow' + (dn ? " done" : "") + (open ? " open" : "") + '"><button class="tick' + (dn ? " on" : "") + '" data-act="block-toggle" data-n="' + n + '" data-i="' + i + '" aria-label="' + (dn ? "Снять отметку" : "Отметить выученным") + '">' + ICON.check + "</button>" + blockMain(n, b, "toggle-block", i, true);
+    var h = '<li class="brow' + (dn ? " done" : "") + (cur ? " cur" : "") + (open ? " open" : "") + '"><button class="tick' + (dn ? " on" : "") + '" data-act="block-toggle" data-n="' + n + '" data-i="' + i + '" aria-label="' + (dn ? "Снять отметку" : "Отметить выученным") + '">' + ICON.check + "</button>" + blockMain(n, b, "toggle-block", i, true);
     if (open) {
       var chk = view.check[key], hint = view.hint[key], lvl = view.hide[key] || 0, edit = view.edit === key;
       h += '<div class="bbody"><div class="btools">' +
@@ -1151,8 +1228,9 @@
       chips("manzilMode", [["volume", "По объёму"], ["hizb", "По хизбам"]], state.set.manzilMode) + "</div>";
     var due = dueReviews();
     h += '<section class="card fresh"><div class="card-title"><h2>Свежее</h2><button class="link" data-act="quiz">проверить себя</button></div>' +
-      '<p class="muted small">Недавно выученное дополнительно повторяется по интервалам (' + intervals().join(", ") + " дн.), пока не закрепится.</p>" +
-      (due.length ? freshList(due) : '<p class="muted">На сегодня свежих повторов нет.</p>' + nextFresh()) + weakLine() + "</section>";
+      '<p class="muted small">Недавно выученное · через ' + intervals().join(", ") + " дн.</p>" +
+      (due.length ? freshList(due) : nextFresh() || '<p class="muted small">Свежих повторов нет.</p>') + weakLine() + "</section>";
+    h += mzWaitHtml();
     if (!parts.length) return h + '<p class="muted">Пока нечего повторять.</p>';
     h += '<div class="manzil-grid">';
     for (var i = 0; i < ci.cyc; i++) {
@@ -1236,7 +1314,10 @@
     return '<div class="overlay" data-act="close"><div class="sheet" role="dialog" aria-labelledby="' + id + '"><div class="sheet-head">' + head + '<button class="icon" data-act="close" aria-label="Закрыть">' + ICON.close + '</button></div><div class="sheet-body">' + body + "</div>" + (foot ? '<div class="sheet-foot">' + foot + "</div>" : "") + "</div></div>";
   }
   function renderOverlay() {
-    var o = document.getElementById("overlay");
+    var o = document.getElementById("overlay"), sb0 = o.querySelector(".sheet-body"), top0 = sb0 ? sb0.scrollTop : 0;
+    var key = view.ob ? "ob" + view.ob.step : view.tafsir ? "tf" : view.done ? "dn" : view.celebrate ? "cl" : view.reader ? "rd" : view.sheet ? "sh" + view.sheet : view.pick ? "pk" : "";
+    var same = o.__k === key; o.__k = key;
+    setTimeout(function () { var sb1 = same && o.querySelector(".sheet-body"); if (sb1 && top0) sb1.scrollTop = top0; }, 0);
     var any = !!(view.ob || view.tafsir || view.done || view.celebrate || view.reader || view.sheet || view.pick);
     document.body.classList.toggle("locked", any);
     if (view.ob) { o.innerHTML = '<div class="overlay"><div class="sheet" role="dialog" aria-labelledby="ob-t">' + obHtml() + "</div></div>"; return; }
@@ -1279,13 +1360,68 @@
       '<p class="dua" lang="ar" dir="rtl">ٱلْحَمْدُ لِلَّهِ ٱلَّذِي بِنِعْمَتِهِ تَتِمُّ ٱلصَّالِحَاتُ</p><p class="muted small">«Хвала Аллаху, по милости Которого совершаются благие дела»</p>' +
       '<p class="done-sum">' + ayahsW(x.ayahs) + " · ≈ " + num1(pagesOf(n)) + " стр." + (days ? " · выучено за " + days + " " + plural(days, "день", "дня", "дней") : "") + "</p>" +
       (full(n) ? "" : '<p class="muted small">Отметьте перевод и тафсир — тогда сура будет заучена полностью.</p>' + stepChips(n)) +
-      '<p class="muted small">Первый повтор — завтра, затем по интервалам и в манзиле.</p>';
+      '<p class="muted small">Первый повтор — завтра, затем по интервалам. В манзиль сура войдёт с ' + esc(niceShort(addDays(cycleInfo().start, cycleInfo().cyc))) + ".</p>" +
+      keepToggle(n);
     var foot = (nx ? '<button class="btn" data-act="done-pick">Другую суру</button><button class="btn primary" data-act="done-next">Учить «' + esc(SURAS[nx - 1].ru) + "»</button>" : '<span></span><button class="btn primary" data-act="close">Альхамдулиллях</button>');
     return '<div class="overlay" data-act="close"><div class="sheet celebrate" role="dialog" aria-labelledby="dn-t"><div class="sheet-body center">' + body + '</div><div class="sheet-foot">' + foot + "</div></div></div>";
   }
+  function lsItem(n) {
+    var s = state.suras[n], r = s && s.range ? s.range : [1, count(n)];
+    if (s && hifz(n)) r = [1, count(n)];
+    return { n: n, s: r[0], e: r[1], w: "" };
+  }
+  function lsLearn(n) {
+    var s = state.suras[n], c = count(n), f = s ? firstUndone(n) || 1 : 1, e = s && s.range && s.range[1] >= f ? s.range[1] : c;
+    return { n: n, s: f, e: e, w: "" };
+  }
+  function itemText(x) { return SURAS[x.n - 1].ru + (x.s === 1 && x.e === count(x.n) ? "" : " " + rng(x.s, x.e)); }
+  function hasHw(hw) { return !!(hw && (typeof hw === "string" ? hw : (hw.learn.length || hw.rev.length || hw.text))); }
+  function lastHw() { var j = state.journal[0]; return j && hasHw(j.hw) ? j : null; }
+  function nextLesson(from) {
+    var u = state.set.ustaz;
+    if (!u.length) return null;
+    for (var i = 0; i < 14; i++) { var d = addDays(from, i); if (u.indexOf(weekday(d)) !== -1) return d; }
+    return null;
+  }
+  /* задание устаза: что выучить и что повторить; выученное отмечается галочкой */
+  function hwBody(hw) {
+    if (typeof hw === "string") return "<p>" + esc(hw) + "</p>";
+    var grp = function (label, list, learn) {
+      if (!list.length) return "";
+      return '<div class="hw-g"><span class="hw-l">' + label + '</span><div class="hw-items">' + list.map(function (x) {
+        var ok = learn && doneCount(x.n, x.s, x.e) === x.e - x.s + 1;
+        return '<button class="hw-i' + (ok ? " ok" : "") + '" data-act="read" data-n="' + x.n + '" data-a="' + x.s + '" data-b="' + x.e + '">' + (ok ? ICON.check : "") + esc(itemText(x)) + "</button>";
+      }).join("") + "</div></div>";
+    };
+    return grp("Выучить", hw.learn, true) + grp("Повторить", hw.rev, false) + (hw.text ? '<p class="hw-text">' + esc(hw.text) + "</p>" : "");
+  }
+  function hwPlain(hw) {
+    if (typeof hw === "string") return hw;
+    var out = [];
+    if (hw.learn.length) out.push("выучить " + hw.learn.map(itemText).join(", "));
+    if (hw.rev.length) out.push("повторить " + hw.rev.map(itemText).join(", "));
+    if (hw.text) out.push(hw.text);
+    return out.join("; ");
+  }
+  function jItems(j) { return j.items || (j.n ? [{ n: j.n, s: j.s, e: j.e }] : []); }
+  function gradeTag(g) {
+    if (typeof g === "number") return '<span class="tag mark g' + g + '" title="Оценка">' + g + "</span>";
+    var lg = LESSON_GRADES.filter(function (x) { return x[0] === g; })[0];
+    return lg ? '<span class="tag ' + g + '">' + lg[1] + "</span>" : "";
+  }
+  function keepToggle(n) {
+    var on = state.keep.indexOf(n) !== -1;
+    return '<button class="keep-t" data-act="keep" data-n="' + n + '" aria-pressed="' + on + '"><span class="kbox">' + (on ? "✓" : "") + "</span>Оставить суру на главной</button>";
+  }
   function lessonRow(j) {
-    var g = LESSON_GRADES.filter(function (x) { return x[0] === j.g; })[0];
-    return '<div class="jrow"><div><b>' + esc(niceShort(j.d)) + " · " + esc(SURAS[j.n - 1].ru) + " " + rng(j.s, j.e) + "</b>" + (g ? '<span class="tag ' + j.g + '">' + g[1] + "</span>" : "") + "</div>" + (j.note ? '<p class="muted small">' + esc(j.note) + "</p>" : "") + "</div>";
+    var it = jItems(j).map(function (x) { return SURAS[x.n - 1].ru + (x.s === 1 && x.e === count(x.n) ? "" : " " + rng(x.s, x.e)); }).join(", ");
+    return '<div class="jrow"><div><b>' + esc(niceShort(j.d)) + (it ? " · " + esc(it) : "") + "</b>" + gradeTag(j.g) + "</div>" + (j.note ? '<p class="muted small">' + esc(j.note) + "</p>" : "") +
+      (hasHw(j.hw) ? '<p class="small jhw"><b>Задание:</b> ' + esc(hwPlain(j.hw)) + "</p>" : "") + "</div>";
+  }
+  function hwNote() {
+    var j = lastHw();
+    if (!j) return "";
+    return '<div class="note-hw"><span class="eyebrow">Задание устаза</span>' + hwBody(j.hw) + "</div>";
   }
   function sheetHtml(kind) {
     if (kind === "weak") {
@@ -1306,14 +1442,31 @@
     if (kind === "path") return pathHtml();
     return "";
   }
+  function lsList(g) { var L = view.lesson; return g === "learn" ? L.hw.learn : g === "rev" ? L.hw.rev : L.items; }
   function lessonHtml() {
-    var L = view.lesson, c = count(L.n);
-    var suras = SURAS.filter(function (x) { return doneCount(x.n) > 0 || x.n === state.current || x.n === L.n; });
-    var body = '<div class="field"><label for="ls-n">Сура</label><select id="ls-n">' + suras.map(function (x) { return '<option value="' + x.n + '"' + (x.n === L.n ? " selected" : "") + ">" + x.n + ". " + esc(x.ru) + "</option>"; }).join("") + "</select></div>" +
-      '<div class="range-edit"><label>Аяты с <input type="number" id="ls-s" min="1" max="' + c + '" value="' + L.s + '"></label><label>по <input type="number" id="ls-e" min="1" max="' + c + '" value="' + L.e + '"></label></div>' +
-      '<div class="field"><label>Оценка</label><div class="seg">' + LESSON_GRADES.map(function (g) { return '<button class="segb" data-act="ls-grade" data-v="' + g[0] + '" aria-pressed="' + (L.g === g[0]) + '">' + g[1] + "</button>"; }).join("") + "</div></div>" +
-      '<div class="field"><label for="ls-note">Замечания устаза</label><textarea id="ls-note" class="note" placeholder="Например: следить за мадд, путает 23 и 24 аяты">' + esc(L.note) + "</textarea></div>" +
-      '<div class="field"><label for="ls-weak">Аяты с замечаниями</label><input type="text" id="ls-weak" value="' + esc(L.weak) + '" placeholder="например: 23, 24–26"><span class="muted small">Попадут в слабые места.</span></div>';
+    var L = view.lesson;
+    var mine = SURAS.filter(function (x) { return doneCount(x.n) > 0 || x.n === state.current; });
+    var opts = function (sel) {
+      var o = function (x) { return '<option value="' + x.n + '"' + (x.n === sel ? " selected" : "") + ">" + x.n + ". " + esc(x.ru) + "</option>"; };
+      return (mine.length ? '<optgroup label="Учу и знаю">' + mine.map(o).join("") + "</optgroup>" : "") + '<optgroup label="Все суры">' + SURAS.map(o).join("") + "</optgroup>";
+    };
+    var list = function (g) {
+      var arr = lsList(g);
+      return '<div class="ls-items">' + arr.map(function (it, k) {
+        var c = count(it.n), at = ' data-g="' + g + '" data-k="' + k + '"';
+        return '<div class="ls-item"><select class="ls-n"' + at + ' aria-label="Сура">' + opts(it.n) + "</select>" +
+          '<input type="text" inputmode="numeric" class="ls-r"' + at + ' value="' + rng(it.s, it.e) + '" aria-label="Аяты (из ' + c + ')">' +
+          (g !== "items" || arr.length > 1 ? '<button class="icon sm" data-act="ls-del"' + at + ' aria-label="Убрать суру">' + ICON.close + "</button>" : "") +
+          (g === "items" ? '<input type="text" class="ls-w"' + at + ' value="' + esc(it.w) + '" placeholder="ошибки в аятах: 23, 24–26" aria-label="Аяты с ошибками">' : "") + "</div>";
+      }).join("") + "</div>";
+    };
+    var body = '<div class="field"><label>Что сдано</label>' + list("items") + '<button class="link ls-add" data-act="ls-add" data-g="items">+ сура</button></div>' +
+      '<div class="field"><label>Оценка</label><div class="seg marks">' + MARKS.map(function (g) { return '<button class="segb mk g' + g[0] + '" data-act="ls-grade" data-v="' + g[0] + '" aria-pressed="' + (L.g === g[0]) + '" aria-label="' + g[0] + " — " + g[1] + '">' + g[0] + "</button>"; }).join("") + "</div></div>" +
+      '<div class="field"><label for="ls-note">Замечания</label><input type="text" id="ls-note" value="' + esc(L.note) + '" placeholder="например: следить за мадд"></div>' +
+      '<div class="field hw-f"><label>Задание к следующему уроку</label>' +
+      '<div class="hw-sub"><span class="hw-l">Выучить</span>' + list("learn") + '<button class="link ls-add" data-act="ls-add" data-g="learn">+ сура</button></div>' +
+      '<div class="hw-sub"><span class="hw-l">Повторить</span>' + list("rev") + '<button class="link ls-add" data-act="ls-add" data-g="rev">+ сура</button></div>' +
+      '<input type="text" id="ls-hw" value="' + esc(L.hw.text) + '" placeholder="комментарий (необязательно)" aria-label="Комментарий к заданию"></div>';
     return sheet("ls-t", '<div><h2 id="ls-t">Урок с устазом</h2><span class="muted small">' + esc(nice(today())) + "</span></div>", body, '<button class="btn" data-act="sheet" data-v="journal">Журнал</button><button class="btn primary" data-act="lesson-save">Сохранить</button>');
   }
   function quizHtml() {
@@ -1516,13 +1669,13 @@
     clearTimeout(viewSaveT);
     viewSaveT = setTimeout(function () {
       view.scroll[viewKey()] = window.scrollY;
-      try { localStorage.setItem("hifz.view", JSON.stringify({ tab: view.tab, sura: view.sura, lastSura: view.lastSura, openB: view.openB, scroll: view.scroll })); } catch (e) { /* ignore */ }
+      try { localStorage.setItem("hifz.view", JSON.stringify({ tab: view.tab, sura: view.sura, lastSura: view.lastSura, openB: view.openB, scroll: view.scroll, plain: view.plain })); } catch (e) { /* ignore */ }
     }, 150);
   }
   function restoreView() {
     try {
       var v = JSON.parse(localStorage.getItem("hifz.view") || "null");
-      if (v) { view.tab = v.tab || "today"; view.sura = v.sura || null; view.openB = v.openB || null; view.lastSura = v.lastSura || null; view.scroll = v.scroll || {}; }
+      if (v) { view.tab = v.tab || "today"; view.sura = v.sura || null; view.openB = v.openB || null; view.lastSura = v.lastSura || null; view.scroll = v.scroll || {}; view.plain = v.plain || {}; }
     } catch (e) { /* ignore */ }
   }
   window.addEventListener("scroll", function () { updateSticky(); if (state && state.setup) saveView(); }, { passive: true });
@@ -1597,23 +1750,40 @@
         setDone(n, b.s, b.e, on);
         if (on) { toast("Блок " + rng(b.s, b.e) + " выучен"); markDay(); afterProgress(n); }
         afterChange(); return;
-      case "range-edit": view.rangeEdit = true; break;
+      case "range-edit": var r0 = range(n); view.split = { a: r0[0], b: r0[1], m: "auto", k: Math.max(1, Math.min(10, (blocksOf(n)[0] || { s: 1, e: 5 }).e - (blocksOf(n)[0] || { s: 1 }).s + 1)) }; view.rangeEdit = true; break;
+      case "cancel-split": view.rangeEdit = false; view.split = null; break;
+      case "split-all": view.split.a = 1; view.split.b = count(n); break;
+      case "split-m": view.split.m = el.getAttribute("data-v"); break;
+      case "split-go":
+        var spl = view.split, c1 = count(n), sa = Math.max(1, Math.min(c1, spl.a | 0)), sb = Math.max(sa, Math.min(c1, spl.b | 0));
+        if (spl.m === "eq") {
+          var kk = Math.max(1, Math.min(40, spl.k | 0)), out = [];
+          for (var q1 = sa; q1 <= sb; q1 += kk) { var q2 = Math.min(sb, q1 + kk - 1); out.push({ s: q1, e: q2, name: B.title(rows(n)[q1 - 1][1], q1, q2), d: "" }); }
+          s.range = [sa, sb]; s.blocks = out; s.bsrc = "custom";
+        } else { setRange(n, sa, sb); s.bsrc = "auto"; }
+        view.rangeEdit = false; view.split = null; view.openB = null; save();
+        toast("Аяты " + rng(sa, sb) + ": " + s.blocks.length + " " + plural(s.blocks.length, "блок", "блока", "блоков")); break;
+      case "sura-mode": view.plain[n] = el.getAttribute("data-v") === "1"; view.rangeEdit = false; saveView(); break;
+      case "keep":
+        var kx = state.keep.indexOf(n);
+        if (kx === -1) { state.keep.push(n); var kr = range(n); if ((kr[0] !== 1 || kr[1] !== count(n)) && s.bsrc !== "custom") setRange(n, 1, count(n)); toast("Сура останется на главной"); }
+        else { state.keep.splice(kx, 1); toast("Сура убрана с главной"); }
+        save(); break;
+      case "keep-open": view.keepOpen[n] = !view.keepOpen[n]; break;
+      case "mz-now":
+        mzPending().forEach(function (pp) { mzAdd(pp.n, pp.s, pp.e); }); save(); toast("Добавлено в манзиль"); break;
       case "goto-ayah":
         var ga = document.getElementById("ay-" + n + "-" + el.getAttribute("data-a"));
         if (ga) { var topH = document.querySelector(".top").offsetHeight || 0; window.scrollTo(0, ga.getBoundingClientRect().top + window.scrollY - (getComputedStyle(document.querySelector(".top")).position === "sticky" ? topH : 0) - 60); ga.classList.remove("flash"); void ga.offsetWidth; ga.classList.add("flash"); }
         return;
       case "show-learned": view.showLearned = !view.showLearned; break;
-      case "set-range":
-        setRange(n, +document.getElementById("ra").value, +document.getElementById("rb").value);
-        view.rangeEdit = false; view.openB = null; save(); toast("Блоки построены по аятам " + rng(s.range[0], s.range[1])); break;
       case "know-range":
-        var ka = +document.getElementById("ra").value, kb = +document.getElementById("rb").value, c0 = count(n);
+        var ka = view.split ? view.split.a : range(n)[0], kb = view.split ? view.split.b : range(n)[1], c0 = count(n);
         ka = Math.max(1, Math.min(c0, ka | 0)); kb = Math.max(ka, Math.min(c0, kb | 0));
-        setDone(n, ka, kb, true); s.range = null; s.blocks = null; range(n); blocksOf(n);
-        view.rangeEdit = false; toast("Аяты " + rng(ka, kb) + " отмечены выученными");
+        setDone(n, ka, kb, true); mzAdd(n, ka, kb); s.range = null; s.blocks = null; range(n); blocksOf(n);
+        view.rangeEdit = false; view.split = null; toast("Аяты " + rng(ka, kb) + " отмечены выученными");
         if (hifz(n)) afterProgress(n, true);
         afterChange(); return;
-      case "range-all": setRange(n, 1, count(n)); view.rangeEdit = false; view.openB = null; save(); break;
       case "set-current": state.current = n; view.pick = false; range(n); blocksOf(n); save(); toast("Учим «" + SURAS[n - 1].ru + "»"); break;
       case "pick": view.pick = true; break;
       case "done-next": view.done = null; toast("Учим «" + SURAS[state.current - 1].ru + "»"); break;
@@ -1704,14 +1874,29 @@
         break;
       case "quiz-next": view.quiz.i++; view.quiz.pick = null; if (view.quiz.i >= view.quiz.qs.length) { markDay(); save(); } break;
       case "lesson-new":
-        var ln = state.current || (state.weak[0] && state.weak[0].n) || 114, lr = state.suras[ln] ? range(ln) : [1, count(ln)];
-        view.lesson = { n: ln, s: lr[0], e: lr[1], g: "good", note: "", weak: "" }; view.sheet = "lesson"; break;
-      case "ls-grade": view.lesson.g = el.getAttribute("data-v"); break;
+        var ln = state.current || (state.weak[0] && state.weak[0].n) || 114, lhj = lastHw(), its = [];
+        if (lhj && lhj.d < today() && typeof lhj.hw !== "string") lhj.hw.learn.concat(lhj.hw.rev).forEach(function (x) {
+          var ex = its.filter(function (y) { return y.n === x.n; })[0];
+          if (ex) { ex.s = Math.min(ex.s, x.s); ex.e = Math.max(ex.e, x.e); } else its.push({ n: x.n, s: x.s, e: x.e, w: "" });
+        });
+        if (!its.length) its = [lsItem(ln)];
+        var nl0 = suggestNext();
+        view.lesson = { items: its, g: 5, note: "", hw: { learn: state.current ? [lsLearn(state.current)] : nl0 ? [lsLearn(nl0)] : [], rev: [], text: "" } }; view.sheet = "lesson"; break;
+      case "ls-grade": view.lesson.g = +el.getAttribute("data-v"); break;
+      case "ls-add":
+        var lg = el.getAttribute("data-g"), lit = lsList(lg), pool;
+        if (lg === "learn") pool = [state.current, suggestNext()];
+        else if (lg === "rev") pool = view.lesson.items.map(function (x) { return x.n; }).concat(state.reviews.map(function (r) { return r.n; }), state.keep, SURAS.filter(function (x) { return hifz(x.n); }).map(function (x) { return x.n; }).reverse());
+        else pool = state.reviews.map(function (r) { return r.n; }).concat(state.current ? [state.current] : []);
+        var cand = pool.filter(function (m) { return m && !lit.some(function (x) { return x.n === m; }) && (lg !== "rev" || (doneCount(m) > 0 && !view.lesson.hw.learn.some(function (x) { return x.n === m; }))); });
+        var base = lit.length ? lit[lit.length - 1].n : state.current || 114, nn = cand[0] || (base > 1 ? base - 1 : 2);
+        lit.push(lg === "learn" ? lsLearn(nn) : lsItem(nn)); break;
+      case "ls-del": lsList(el.getAttribute("data-g")).splice(+el.getAttribute("data-k"), 1); break;
       case "lesson-save":
-        var L = view.lesson, cL = count(L.n);
-        L.s = Math.max(1, Math.min(cL, L.s | 0)); L.e = Math.max(L.s, Math.min(cL, L.e | 0));
-        state.journal.unshift({ id: String(Date.now()), d: today(), n: L.n, s: L.s, e: L.e, g: L.g, note: L.note.trim() });
-        parseRanges(L.weak, cL).forEach(function (p) { addWeak(L.n, p[0], p[1], "ustaz", L.note.trim()); });
+        var clampIt = function (x) { var cL = count(x.n), a1 = Math.max(1, Math.min(cL, x.s | 0)); return { n: x.n, s: a1, e: Math.max(a1, Math.min(cL, x.e | 0)) }; };
+        var L = view.lesson, items = L.items.map(function (x) { var y = clampIt(x); y.w = x.w; return y; });
+        state.journal.unshift({ id: String(Date.now()), d: today(), items: items.map(function (x) { return { n: x.n, s: x.s, e: x.e }; }), g: L.g, note: L.note.trim(), hw: { learn: L.hw.learn.map(clampIt), rev: L.hw.rev.map(clampIt), text: L.hw.text.trim() } });
+        items.forEach(function (x) { parseRanges(x.w, count(x.n)).forEach(function (p) { addWeak(x.n, p[0], p[1], "ustaz", L.note.trim()); }); });
         markDay(); view.sheet = "journal"; toast("Урок записан"); afterChange(); return;
       case "lesson-del": var lid = el.getAttribute("data-id"); state.journal = state.journal.filter(function (j) { return j.id !== lid; }); save(); break;
       case "mile-set": state.miles[el.getAttribute("data-id")] = today(); save(); break;
@@ -1762,7 +1947,7 @@
           if (p === true) { setDone(m, 1, count(m), true); sm.tr = o.tr; sm.tf = o.tf; sm.range = [1, count(m)]; }
           else { p.forEach(function (rr) { setDone(m, rr[0], rr[1], true); }); sm.range = null; sm.blocks = null; }
         });
-        state.current = suggestNext(); state.setup = true; state.anchor = today(); state.started = today(); state.mshift = 0; view.ob = null; view.tab = "today";
+        state.current = suggestNext(); state.setup = true; state.anchor = today(); state.started = today(); state.mshift = 0; state.mz = null; view.ob = null; view.tab = "today";
         if (state.current) { range(state.current); blocksOf(state.current); }
         checkMiles(true); save(); toast("План готов");
         break;
@@ -1817,9 +2002,16 @@
     if (el.id === "q") { view.q = el.value; keepFocus("q", render); return; }
     if (el.id === "obq") { view.ob.q = el.value; keepFocus("obq", renderOverlay); return; }
     if (el.id === "ls-note") { view.lesson.note = el.value; return; }
-    if (el.id === "ls-weak") { view.lesson.weak = el.value; return; }
-    if (el.id === "ls-s") { view.lesson.s = +el.value; return; }
-    if (el.id === "ls-e") { view.lesson.e = +el.value; return; }
+    if (el.id === "ls-hw") { view.lesson.hw.text = el.value; return; }
+    if (el.classList.contains("ls-r") || el.classList.contains("ls-w")) {
+      var lk = lsList(el.getAttribute("data-g"))[+el.getAttribute("data-k")];
+      if (lk) {
+        if (el.classList.contains("ls-w")) lk.w = el.value;
+        else { var pr = parseRanges(el.value, count(lk.n)); if (pr.length) { lk.s = pr[0][0]; lk.e = pr[pr.length - 1][1]; } }
+      }
+      return;
+    }
+    if (el.id === "sp-a" || el.id === "sp-b" || el.id === "sp-k") { if (view.split) view.split[el.id.slice(3)] = +el.value; return; }
     if (el.classList.contains("note")) { S(+el.getAttribute("data-n")).note = el.value; save(); return; }
     if (el.classList.contains("bname")) { var n = +el.getAttribute("data-n"); blocksOf(n)[+el.getAttribute("data-i")].name = el.value; S(n).bsrc = "custom"; save(); return; }
     if (el.classList.contains("banchor")) { var an = S(+el.getAttribute("data-n")), as = el.getAttribute("data-s"); if (el.value.trim()) an.anchors[as] = el.value.trim(); else delete an.anchors[as]; save(); return; }
@@ -1837,7 +2029,7 @@
     if (el.classList.contains("banchor")) { setTimeout(render, 0); return; }
     if (el.id === "st-listen") { state.set.listen = el.checked; save(); return; }
     if (el.id === "st-contrast") { state.set.contrast = el.checked; applyTheme(); save(); return; }
-    if (el.id === "ls-n") { var ln = +el.value; view.lesson.n = ln; var lr = state.suras[ln] && state.suras[ln].range ? state.suras[ln].range : [1, count(ln)]; view.lesson.s = lr[0]; view.lesson.e = lr[1]; renderOverlay(); return; }
+    if (el.classList.contains("ls-n")) { var lg2 = el.getAttribute("data-g"), la = lsList(lg2), lk2 = +el.getAttribute("data-k"), w0 = la[lk2].w; la[lk2] = lg2 === "learn" ? lsLearn(+el.value) : lsItem(+el.value); la[lk2].w = w0; renderOverlay(); return; }
     if (el.classList.contains("mdate")) { var id = el.getAttribute("data-id"); if (el.value) state.miles[id] = el.value; else delete state.miles[id]; save(); setTimeout(renderOverlay, 0); }
   });
   document.addEventListener("keydown", function (e) {
