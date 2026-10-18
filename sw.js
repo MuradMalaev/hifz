@@ -1,11 +1,11 @@
 /* Service worker «Хифз»: приложение и текст Корана работают без интернета.
    Аудио, скачанное кнопкой «скачать аудио», хранится в кэше hifz-audio. */
-var VERSION = "hifz-v8";
+var VERSION = "hifz-v9";
 var SHELL = [
   "./", "index.html", "manifest.webmanifest",
   "static/style.css", "static/app.js", "static/data.js", "static/blocks.js",
   "static/data/quran.js", "static/data/themes.js", "static/data/meta.js",
-  "static/fonts/UthmanicHafs.ttf", "static/icons/icon-192.png", "static/icons/icon-512.png"
+  "static/fonts/UthmanicHafs.ttf", "static/icons/icon-192.png", "static/icons/icon-512.png", "static/icons/apple-touch-icon.png", "static/icons/favicon-32.png"
 ];
 self.addEventListener("install", function (e) {
   e.waitUntil(caches.open(VERSION).then(function (c) { return c.addAll(SHELL); }).then(function () { return self.skipWaiting(); }));

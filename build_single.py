@@ -27,6 +27,11 @@ def main():
     html = read("index.html")
     # в однофайловой версии нет манифеста и service worker
     html = re.sub(r'<link rel="(manifest|apple-touch-icon)"[^>]*>\n?', "", html)
+    # иконка вкладки встраивается в файл; лишние размеры убираем
+    with open(os.path.join(ROOT, "static", "icons", "favicon-64.png"), "rb") as f:
+        fav = base64.b64encode(f.read()).decode("ascii")
+    html = re.sub(r'<link rel="icon"[^>]*sizes="192x192"[^>]*>\n?', "", html)
+    html = re.sub(r'<link rel="icon"[^>]*>', '<link rel="icon" type="image/png" href="data:image/png;base64,%s">' % fav, html)
     html = html.replace('<link rel="stylesheet" href="static/style.css">', "<style>\n" + css + "\n</style>")
     for path in ("data.js", "data/quran.js", "data/themes.js", "data/meta.js", "blocks.js", "app.js"):
         js = read("static", *path.split("/")).replace("</script", "<\\/script")
