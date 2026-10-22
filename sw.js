@@ -1,6 +1,6 @@
 /* Service worker «Хифз»: приложение и текст Корана работают без интернета.
    Аудио, скачанное кнопкой «скачать аудио», хранится в кэше hifz-audio. */
-var VERSION = "hifz-v9";
+var VERSION = "hifz-v10";
 var SHELL = [
   "./", "index.html", "manifest.webmanifest",
   "static/style.css", "static/app.js", "static/data.js", "static/blocks.js",
